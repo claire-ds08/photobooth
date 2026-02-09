@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claire & Nadine's Sticker Booth</title>
+    <style>
+        :root {
+            --vintage-cream: #f4ecd8;
+            --vintage-sepia: #704214;
+        }
+        
+        body {
+            background-color: #d7ccc8;
+            background-image: url('https://www.transparenttextures.com/patterns/paper-fibers.png');
+            font-family: 'Courier New', Courier, monospace;
+            display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0;
+        }
+
+        /* Viewfinder */
+        #camera-container {
+            position: relative; width: 320px; height: 320px;
+            border: 12px solid white; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            background: black; overflow: hidden;
+        }
+
+        video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+        /* The "Sticker" Overlay Logic */
+        #overlay-4-squares {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+            pointer-events: none; z-index: 5; display: none;
+            padding: 10px; box-sizing: border-box; gap: 10px;
+        }
+
+        .square-img { 
+            width: 100%; height: 100%; object-fit: contain; 
+            /* This creates the white outline/border around your transparent PNGs */
+            filter: drop-shadow(2px 0 0 white) drop-shadow(-2px 0 0 white) drop-shadow(0 2px 0 white) drop-shadow(0 -2px 0 white);
+        }
+
+        /* Same styles as before for buttons and text */
+        .controls { margin-bottom: 20px; display: flex; gap: 8px; }
+        .filter-btn { padding: 10px 15px; border: 2px solid var(--vintage-sepia); background: var(--vintage-cream); cursor: pointer; font-weight: bold; }
+        .filter-btn.active { background: var(--vintage-sepia); color: white; }
+        #countdown { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 6rem; color: white; z-index: 10; display: none; }
+        .main-btn { margin-top: 25px; padding: 15px 50px; font-size: 1.4rem; background: #a64452; color: white; border: none; cursor: pointer; }
+        #gallery { margin-top: 40px; display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+        .polaroid-item { background: white; padding: 10px 10px 0px 10px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); width: 180px; }
+    </style>
+</head>
+<body>
+
+    <h1>Sticker Booth</h1>
+
+    <div class="controls">
+        <button class="filter-btn active" onclick="setFilter('none', this)">ORIGINAL</button>
+        <button class="filter-btn" onclick="setFilter('bw', this)">B&W</button>
+        <button class="filter-btn" onclick="setFilter('sepia', this)">SEPIA</button>
+        <button class="filter-btn" onclick="setFilter('squares', this)">STICKERS</button>
+    </div>
+
+    <div id="camera-container">
+        <video id="video" autoplay playsinline></video>
+        <div id="overlay-4-squares">
+            <img src="IMG_2546.png" class="square-img">
+            <img src="IMG_2544.png" class="square-img">
+            <img src="IMG_2542.png" class="square-img">
+            <img src="IMG_2543.png" class="square-img">
+        </div>
+        <div id="countdown">3</div>
+    </div>
+
+    <button class="main-btn" onclick="startCapture()">SNAP PHOTO</button>
+
+    <div id="gallery"></div>
+
+    <canvas id="canvas" style="display:none;" width="640" height="750"></canvas>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const overlay = document.getElementById('overlay-4-squares');
+        const countdownEl = document.getElementById('countdown');
+        let currentFilter = 'none';
+
+        navigator.mediaDevices.getUserMedia({ video: { aspectRatio: 1 } })
+            .then(stream => { video.srcObject = stream; });
+
+        function setFilter(type, btn) {
+            currentFilter = type;
+            video.style.filter = 'none';
+            overlay.style.display = 'none';
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            if(type === 'bw') video.style.filter = 'grayscale(1) contrast(1.2)';
+            if(type === 'sepia') video.style.filter = 'sepia(1) contrast(1.1)';
+            if(type === 'squares') overlay.style.display = 'grid';
+        }
+
+        function startCapture() {
+            let count = 3;
+            countdownEl.style.display = 'block';
+            countdownEl.innerText = count;
+            const timer = setInterval(() => {
+                count--;
+                if(count > 0) { countdownEl.innerText = count; }
+                else { clearInterval(timer); countdownEl.style.display = 'none'; snap(); }
+            }, 1000);
+        }
+
+        function snap() {
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, 640, 750);
+            
+            ctx.save();
+            ctx.translate(620, 20);
+            ctx.scale(-1, 1);
+            if(currentFilter === 'bw') ctx.filter = 'grayscale(100%) contrast(120%)';
+            if(currentFilter === 'sepia') ctx.filter = 'sepia(100%) contrast(110%)';
+            ctx.drawImage(video, 0, 0, 600, 600);
+            ctx.restore();
+
+            // Draw Stickers with White Outline on Canvas
+            if(currentFilter === 'squares') {
+                const imgs = document.querySelectorAll('.square-img');
+                // We simulate the white outline on canvas by drawing the image offset 4 times
+                function drawSticker(img, x, y) {
+                    ctx.save();
+                    ctx.shadowColor = "white";
+                    ctx.shadowBlur = 1;
+                    ctx.shadowOffsetX = 3; ctx.shadowOffsetY = 3; ctx.drawImage(img, x, y, 280, 280);
+                    ctx.shadowOffsetX = -3; ctx.shadowOffsetY = -3; ctx.drawImage(img, x, y, 280, 280);
+                    ctx.restore();
+                    ctx.drawImage(img, x, y, 280, 280);
+                }
+                drawSticker(imgs[0], 30, 30);
+                drawSticker(imgs[1], 330, 30);
+                drawSticker(imgs[2], 30, 330);
+                drawSticker(imgs[3], 330, 330);
+            }
+
+            ctx.filter = 'none';
+            ctx.fillStyle = "#3e2723";
+            ctx.font = "42px 'Brush Script MT', cursive";
+            ctx.textAlign = "center";
+            ctx.fillText("Claire and Nadine", 320, 700);
+
+            const dataUrl = canvas.toDataURL('image/png');
+            saveToDevice(dataUrl);
+            addToGallery(dataUrl);
+        }
+
+        function saveToDevice(url) {
+            const link = document.createElement('a');
+            link.download = `sticker-booth.png`;
+            link.href = url;
+            link.click();
+        }
+
+        function addToGallery(url) {
+            const div = document.createElement('div');
+            div.className = 'polaroid-item';
+            div.innerHTML = `<img src="${url}" style="width:100%">`;
+            document.getElementById('gallery').prepend(div);
+        }
+    </script>
+</body>
+</html>
