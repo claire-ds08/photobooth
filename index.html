@@ -9,197 +9,190 @@
             background: #d1c4bc; font-family: 'Courier New', Courier, monospace; 
             display: flex; flex-direction: column; align-items: center; padding: 20px;
         }
-        /* Live Filter Preview */
-        .none { filter: none; }
-        .bw { filter: grayscale(1) contrast(1.2); }
-        .sepia { filter: sepia(1) contrast(1.1); }
-
-        #camera-view {
+        
+        /* The Camera Viewport */
+        #viewport {
             position: relative; width: 320px; height: 240px;
-            border: 10px solid white; box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-            background: #000; overflow: hidden; margin-bottom: 10px;
+            border: 10px solid white; background: #000; overflow: hidden;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
         }
         video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+        
+        /* Live Filter CSS */
+        .f-none { filter: none; }
+        .f-bw { filter: grayscale(1) contrast(1.2); }
+        .f-sepia { filter: sepia(1) contrast(1.1); }
 
-        .controls { margin-bottom: 20px; display: flex; gap: 10px; }
-        .filter-btn { 
-            padding: 8px 15px; border: 1px solid #704214; background: #f4ecd8; 
-            cursor: pointer; font-family: inherit; font-size: 0.8rem;
+        .controls { margin: 20px 0; display: flex; gap: 10px; }
+        .btn { 
+            padding: 10px 20px; border: 1px solid #704214; background: #f4ecd8; 
+            cursor: pointer; font-family: inherit; font-weight: bold;
         }
-        .filter-btn.active { background: #704214; color: white; }
+        .btn.active { background: #704214; color: white; }
+        .btn-start { background: #a64452; color: white; border: none; font-size: 1.1rem; }
 
-        .start-btn {
-            padding: 12px 30px; background: #a64452; color: white; 
-            border: none; cursor: pointer; font-family: inherit; font-size: 1rem;
-        }
         #countdown {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            font-size: 4rem; color: white; font-weight: bold; z-index: 10; display: none;
+            font-size: 5rem; color: white; font-weight: bold; display: none; text-shadow: 0 0 10px black;
         }
 
-        #strip-preview {
-            margin-top: 30px; background: #1a1a1a; padding: 10px;
-            display: flex; flex-direction: column; gap: 8px; width: 120px;
-            border-radius: 2px; box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+        /* The Vertical Strip Preview */
+        #strip-container {
+            margin-top: 30px; background: #111; padding: 15px;
+            display: flex; flex-direction: column; gap: 10px; width: 140px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
-        .shot-box { width: 100%; height: 80px; background: #333; object-fit: cover; border: 1px solid #444; }
-        .header-box { color: white; text-align: center; font-size: 8px; margin-bottom: 5px; }
-        
-        #download-manual { display: none; margin-top: 20px; text-decoration: none; color: white; background: #704214; padding: 10px; border-radius: 5px; }
+        .header { color: white; text-align: center; font-size: 10px; margin-bottom: 5px; }
+        .box { width: 100%; height: 100px; background: #222; object-fit: cover; }
     </style>
 </head>
 <body>
 
-    <h2 style="font-size: 1.5rem;">Photo Strip Booth</h2>
+    <h2>C & N Photobooth</h2>
 
     <div class="controls">
-        <button class="filter-btn active" onclick="changeFilter('none', this)">ORIGINAL</button>
-        <button class="filter-btn" onclick="changeFilter('bw', this)">B&W</button>
-        <button class="filter-btn" onclick="changeFilter('sepia', this)">SEPIA</button>
+        <button class="btn active" onclick="setFilter('none', this)">ORIGINAL</button>
+        <button class="btn" onclick="setFilter('bw', this)">B&W</button>
+        <button class="btn" onclick="setFilter('sepia', this)">SEPIA</button>
     </div>
 
-    <div id="camera-view">
-        <video id="video" autoplay playsinline class="none"></video>
+    <div id="viewport">
+        <video id="video" autoplay playsinline class="f-none"></video>
         <div id="countdown">3</div>
     </div>
 
-    <button id="snap-btn" class="start-btn" onclick="startSession()">Start 4-Shot Session</button>
-    <a id="download-manual" href="#">Download Failed? Click Here</a>
+    <button id="start-btn" class="btn btn-start" style="margin-top:20px;" onclick="runBooth()">START 4 POSES</button>
 
-    <div id="strip-preview">
-        <div class="header-box">C & N<br>2026</div>
-        <img class="shot-box" id="p0">
-        <img class="shot-box" id="p1">
-        <img class="shot-box" id="p2">
-        <img class="shot-box" id="p3">
+    <div id="strip-container">
+        <div class="header">C & N<br>2026</div>
+        <img id="img0" class="box">
+        <img id="img1" class="box">
+        <img id="img2" class="box">
+        <img id="img3" class="box">
     </div>
 
-    <canvas id="finalCanvas" width="600" height="1800" style="display:none;"></canvas>
+    <canvas id="mainCanvas" width="600" height="1800" style="display:none;"></canvas>
 
     <script>
         const video = document.getElementById('video');
-        const countdownEl = document.getElementById('countdown');
-        const canvas = document.getElementById('finalCanvas');
+        const canvas = document.getElementById('mainCanvas');
         const ctx = canvas.getContext('2d');
-        let activeFilter = 'none';
-        let capturedShots = [];
+        let currentFilter = 'none';
+        let capturedData = [];
 
-        // Preload Stickers
-        const stickerSources = ["IMG_2542.png", "IMG_2543.png", "IMG_2544.png", "IMG_2546.png"];
-        const stickerImages = [];
+        // 1. Start Camera
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => alert("Please enable camera access!"));
 
-        // This ensures stickers are loaded and "anonymous" to prevent canvas security errors
-        stickerSources.forEach(src => {
-            const img = new Image();
-            img.crossOrigin = "anonymous";
-            img.src = src;
-            stickerImages.push(img);
-        });
-
-        navigator.mediaDevices.getUserMedia({ video: true }).then(s => video.srcObject = s);
-
-        function changeFilter(type, btn) {
-            activeFilter = type;
-            video.className = type;
-            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        function setFilter(type, btn) {
+            currentFilter = type;
+            video.className = 'f-' + type;
+            document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
         }
 
-        async function startSession() {
-            capturedShots = [];
-            document.getElementById('snap-btn').disabled = true;
-            document.getElementById('download-manual').style.display = 'none';
-            
+        // 2. The Main Logic Loop
+        async function runBooth() {
+            capturedData = [];
+            document.getElementById('start-btn').disabled = true;
+
             for (let i = 0; i < 4; i++) {
-                await doCountdown();
-                takeShot(i);
-                await new Promise(r => setTimeout(r, 1000));
+                await countdown(3);
+                const frame = captureFrame();
+                capturedData.push(frame);
+                document.getElementById('img' + i).src = frame;
+                await sleep(1000); // 1 second gap
             }
-            
-            buildFinalStrip();
-            document.getElementById('snap-btn').disabled = false;
+
+            createFinalStrip();
+            document.getElementById('start-btn').disabled = false;
         }
 
-        function doCountdown() {
-            return new Promise(res => {
-                let count = 3;
-                countdownEl.style.display = 'block';
-                countdownEl.innerText = count;
-                let t = setInterval(() => {
+        function countdown(seconds) {
+            return new Promise(resolve => {
+                const el = document.getElementById('countdown');
+                el.style.display = 'block';
+                let count = seconds;
+                el.innerText = count;
+                const timer = setInterval(() => {
                     count--;
-                    if(count > 0) countdownEl.innerText = count;
-                    else { clearInterval(t); countdownEl.style.display = 'none'; res(); }
+                    if (count <= 0) {
+                        clearInterval(timer);
+                        el.style.display = 'none';
+                        resolve();
+                    } else {
+                        el.innerText = count;
+                    }
                 }, 1000);
             });
         }
 
-        function takeShot(index) {
-            const temp = document.createElement('canvas');
-            temp.width = 600; temp.height = 450;
-            const tCtx = temp.getContext('2d');
+        function captureFrame() {
+            const tmp = document.createElement('canvas');
+            tmp.width = 600; tmp.height = 450;
+            const tCtx = tmp.getContext('2d');
             
-            tCtx.save();
-            tCtx.translate(600, 0); 
+            // Mirror
+            tCtx.translate(600, 0);
             tCtx.scale(-1, 1);
             
-            // APPLYING THE FILTER TO THE SAVED DATA
-            if(activeFilter === 'bw') tCtx.filter = 'grayscale(100%) contrast(120%)';
-            if(activeFilter === 'sepia') tCtx.filter = 'sepia(100%) contrast(110%)';
+            // Apply the filter permanently to this frame
+            if(currentFilter === 'bw') tCtx.filter = 'grayscale(100%) contrast(1.2)';
+            if(currentFilter === 'sepia') tCtx.filter = 'sepia(100%) contrast(1.1)';
             
             tCtx.drawImage(video, 0, 0, 600, 450);
-            tCtx.restore();
-
-            const data = temp.toDataURL('image/png');
-            capturedShots.push(data);
-            document.getElementById(`p${index}`).src = data;
+            return tmp.toDataURL('image/png');
         }
 
-        function buildFinalStrip() {
+        
+
+        function createFinalStrip() {
+            // Draw Black Strip Background
             ctx.fillStyle = "#111111";
             ctx.fillRect(0, 0, 600, 1800);
 
+            // Add Header Text
             ctx.fillStyle = "white";
             ctx.font = "italic 40px serif";
             ctx.textAlign = "center";
-            ctx.fillText("Claire & Nadine", 300, 100);
+            ctx.fillText("C and N photobooth", 300, 100);
 
-            let loadedCount = 0;
-            capturedShots.forEach((data, i) => {
+            let imagesLoaded = 0;
+            capturedData.forEach((data, i) => {
                 const img = new Image();
                 img.src = data;
                 img.onload = () => {
                     const y = 200 + (i * 380);
                     ctx.drawImage(img, 50, y, 500, 350);
                     
-                    // Draw stickers
-                    const s = stickerImages[i];
-                    if(s.complete) { ctx.drawImage(s, 420, y + 220, 120, 120); }
-
-                    loadedCount++;
-                    if(loadedCount === 4) {
-                        finishDownload();
-                    }
+                    // Draw Sticker from your files
+                    const sticker = new Image();
+                    sticker.src = `fav${i+1}.png`; 
+                    sticker.onload = () => {
+                        ctx.drawImage(sticker, 400, y + 200, 140, 140);
+                        imagesLoaded++;
+                        if (imagesLoaded === 4) downloadResult();
+                    };
+                    sticker.onerror = () => { // If sticker fails, still continue
+                        imagesLoaded++;
+                        if (imagesLoaded === 4) downloadResult();
+                    };
                 };
             });
         }
 
-        function finishDownload() {
-            setTimeout(() => {
-                const final = canvas.toDataURL('image/png');
-                const link = document.createElement('a');
-                link.download = `CN-Booth-${Date.now()}.png`;
-                link.href = final;
-                
-                // Show the manual link just in case
-                const manual = document.getElementById('download-manual');
-                manual.href = final;
-                manual.download = link.download;
-                manual.style.display = 'block';
-
-                // Attempt auto-download
-                link.click();
-            }, 800);
+        function downloadResult() {
+            const dataURL = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.href = dataURL;
+            link.download = 'CN-Strip-2026.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
+
+        function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
     </script>
 </body>
 </html>
