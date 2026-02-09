@@ -44,6 +44,8 @@
         }
         .shot-box { width: 100%; height: 80px; background: #333; object-fit: cover; border: 1px solid #444; }
         .header-box { color: white; text-align: center; font-size: 8px; margin-bottom: 5px; }
+        
+        #download-manual { display: none; margin-top: 20px; text-decoration: none; color: white; background: #704214; padding: 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
@@ -62,6 +64,7 @@
     </div>
 
     <button id="snap-btn" class="start-btn" onclick="startSession()">Start 4-Shot Session</button>
+    <a id="download-manual" href="#">Download Failed? Click Here</a>
 
     <div id="strip-preview">
         <div class="header-box">C & N<br>2026</div>
@@ -81,21 +84,17 @@
         let activeFilter = 'none';
         let capturedShots = [];
 
-        // Preload Stickers and return a Promise
-        const stickerSources = ["fav1.png", "fav2.png", "fav3.png", "fav4.png"];
+        // Preload Stickers
+        const stickerSources = ["IMG_2542.png", "IMG_2543.png", "IMG_2544.png", "IMG_2546.png"];
         const stickerImages = [];
 
-        function loadStickers() {
-            return Promise.all(stickerSources.map(src => {
-                return new Promise((resolve) => {
-                    const img = new Image();
-                    img.src = src;
-                    img.onload = () => resolve(img);
-                    img.onerror = () => resolve(null); // Fallback if image missing
-                    stickerImages.push(img);
-                });
-            }));
-        }
+        // This ensures stickers are loaded and "anonymous" to prevent canvas security errors
+        stickerSources.forEach(src => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.src = src;
+            stickerImages.push(img);
+        });
 
         navigator.mediaDevices.getUserMedia({ video: true }).then(s => video.srcObject = s);
 
@@ -109,6 +108,7 @@
         async function startSession() {
             capturedShots = [];
             document.getElementById('snap-btn').disabled = true;
+            document.getElementById('download-manual').style.display = 'none';
             
             for (let i = 0; i < 4; i++) {
                 await doCountdown();
@@ -116,7 +116,6 @@
                 await new Promise(r => setTimeout(r, 1000));
             }
             
-            await loadStickers(); // Ensure stickers are ready
             buildFinalStrip();
             document.getElementById('snap-btn').disabled = false;
         }
@@ -143,7 +142,7 @@
             tCtx.translate(600, 0); 
             tCtx.scale(-1, 1);
             
-            // Apply Filter explicitly to the canvas context
+            // APPLYING THE FILTER TO THE SAVED DATA
             if(activeFilter === 'bw') tCtx.filter = 'grayscale(100%) contrast(120%)';
             if(activeFilter === 'sepia') tCtx.filter = 'sepia(100%) contrast(110%)';
             
@@ -163,8 +162,6 @@
             ctx.font = "italic 40px serif";
             ctx.textAlign = "center";
             ctx.fillText("Claire & Nadine", 300, 100);
-            ctx.font = "25px 'Courier New'";
-            ctx.fillText("02 / 09 / 26", 300, 150);
 
             let loadedCount = 0;
             capturedShots.forEach((data, i) => {
@@ -174,24 +171,34 @@
                     const y = 200 + (i * 380);
                     ctx.drawImage(img, 50, y, 500, 350);
                     
-                    // Draw corresponding sticker
+                    // Draw stickers
                     const s = stickerImages[i];
-                    if(s) ctx.drawImage(s, 420, y + 220, 120, 120);
+                    if(s.complete) { ctx.drawImage(s, 420, y + 220, 120, 120); }
 
                     loadedCount++;
                     if(loadedCount === 4) {
-                        setTimeout(() => {
-                            const final = canvas.toDataURL('image/png');
-                            const link = document.createElement('a');
-                            link.setAttribute('download', `CN-Strip-${Date.now()}.png`);
-                            link.setAttribute('href', final);
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                        }, 500); // Small delay to ensure final paint
+                        finishDownload();
                     }
                 };
             });
+        }
+
+        function finishDownload() {
+            setTimeout(() => {
+                const final = canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.download = `CN-Booth-${Date.now()}.png`;
+                link.href = final;
+                
+                // Show the manual link just in case
+                const manual = document.getElementById('download-manual');
+                manual.href = final;
+                manual.download = link.download;
+                manual.style.display = 'block';
+
+                // Attempt auto-download
+                link.click();
+            }, 800);
         }
     </script>
 </body>
