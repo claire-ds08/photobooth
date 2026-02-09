@@ -3,159 +3,171 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>C & N Booth V3</title>
+    <title>C & N Booth V4</title>
     <style>
         body { background: #d1c4bc; font-family: 'Courier New', monospace; display: flex; flex-direction: column; align-items: center; padding: 20px; }
         
-        #viewport {
+        /* The Viewfinder */
+        #booth-box {
             position: relative; width: 320px; height: 240px;
             border: 8px solid white; background: #000; overflow: hidden;
             box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
         video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
         
-        /* Filter Styles */
-        .f-bw { filter: grayscale(1) contrast(1.2); }
-        .f-sepia { filter: sepia(1) contrast(1.1); }
-        /* 0.5 Zoom Out Look */
-        .f-fisheye { transform: scaleX(-1) scale(0.7); } 
+        /* Filter Previews */
+        .preview-bw { filter: grayscale(1) contrast(1.2); }
+        .preview-sepia { filter: sepia(1) contrast(1.1); }
+        .preview-wide { transform: scaleX(-1) scale(0.65); } /* Simulated 0.5 zoom */
 
-        /* MacBook Heart Crown Preview */
-        #heart-crown {
-            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-            width: 150px; height: 60px; pointer-events: none; display: none; z-index: 5;
-            background: url('https://cdn-icons-png.flaticon.com/512/833/833472.png') repeat-x;
-            background-size: 30px;
+        /* MacBook Style Hearts Crown */
+        #hearts-crown {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            font-size: 30px; pointer-events: none; display: none; z-index: 10;
+            white-space: nowrap;
+        }
+
+        /* Camera Flash Effect */
+        #flash {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: white; opacity: 0; pointer-events: none; z-index: 20;
         }
 
         .controls { margin: 15px; display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; }
         .btn { padding: 8px 12px; border: 1px solid #704214; background: #f4ecd8; cursor: pointer; font-family: inherit; }
         .btn.active { background: #704214; color: white; }
-        .start-btn { background: #a64452; color: white; border: none; padding: 12px 30px; font-size: 1rem; margin-top: 10px; }
+        .start-btn { background: #a64452; color: white; border: none; padding: 12px 30px; font-size: 1rem; margin-top: 10px; cursor: pointer; }
 
-        #countdown {
+        #timer-text {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            font-size: 5rem; color: white; font-weight: bold; z-index: 10; display: none;
+            font-size: 5rem; color: white; font-weight: bold; z-index: 15; display: none;
         }
 
-        #preview-strip {
+        #strip-render {
             margin-top: 20px; background: #111; padding: 12px;
             display: flex; flex-direction: column; gap: 8px; width: 130px;
         }
-        .shot { width: 100%; height: 90px; background: #222; object-fit: cover; }
-        .footer-label { color: white; text-align: center; font-size: 9px; margin-top: 5px; opacity: 0.8; }
+        .shot-preview { width: 100%; height: 90px; background: #222; object-fit: cover; }
+        .label { color: white; text-align: center; font-size: 9px; margin-top: 5px; opacity: 0.8; }
     </style>
 </head>
 <body>
 
-    <h2 style="letter-spacing: 2px;">C & N PHOTOBOOTH</h2>
+    <h2 style="letter-spacing: 2px;">VINTAGE PHOTO AUTOMAT</h2>
 
     <div class="controls">
-        <button class="btn active" onclick="updateFilter('none', this)">ORIGINAL</button>
-        <button class="btn" onclick="updateFilter('bw', this)">B&W</button>
-        <button class="btn" onclick="updateFilter('sepia', this)">SEPIA</button>
-        <button class="btn" onclick="updateFilter('fisheye', this)">0.5 WIDE</button>
-        <button class="btn" onclick="updateFilter('hearts', this)">HEARTS</button>
+        <button class="btn active" onclick="applyMode('none', this)">ORIGINAL</button>
+        <button class="btn" onclick="applyMode('bw', this)">B&W</button>
+        <button class="btn" onclick="applyMode('sepia', this)">SEPIA</button>
+        <button class="btn" onclick="applyMode('wide', this)">0.5 WIDE</button>
+        <button class="btn" onclick="applyMode('hearts', this)">HEARTS</button>
     </div>
 
-    <div id="viewport">
-        <video id="video" autoplay playsinline></video>
-        <div id="heart-crown"></div>
-        <div id="countdown"></div>
+    <div id="booth-box">
+        <video id="webcam" autoplay playsinline></video>
+        <div id="hearts-crown">❤️ ❤️ ❤️</div>
+        <div id="timer-text"></div>
+        <div id="flash"></div>
     </div>
 
-    <button id="main-action" class="btn start-btn" onclick="takeFourShots()">START 4-SHOTS</button>
+    <button id="go-btn" class="start-btn" onclick="captureSession()">START SESSION</button>
 
-    <div id="preview-strip">
-        <img id="p0" class="shot">
-        <img id="p1" class="shot">
-        <img id="p2" class="shot">
-        <img id="p3" class="shot">
-        <div class="footer-label">C and N photobooth</div>
+    <div id="strip-render">
+        <img id="prev0" class="shot-preview">
+        <img id="prev1" class="shot-preview">
+        <img id="prev2" class="shot-preview">
+        <img id="prev3" class="shot-preview">
+        <div class="label">C and N photobooth</div>
     </div>
 
-    <canvas id="canvas" width="600" height="1800" style="display:none;"></canvas>
+    <canvas id="hidden-canvas" width="600" height="1800" style="display:none;"></canvas>
 
     <script>
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const crown = document.getElementById('heart-crown');
-        let currentFilter = 'none';
-        let photos = [];
+        const webcam = document.getElementById('webcam');
+        const hCanvas = document.getElementById('hidden-canvas');
+        const hCtx = hCanvas.getContext('2d');
+        const crown = document.getElementById('hearts-crown');
+        const flash = document.getElementById('flash');
+        let activeMode = 'none';
+        let sessionShots = [];
 
-        navigator.mediaDevices.getUserMedia({ video: true }).then(s => video.srcObject = s);
+        navigator.mediaDevices.getUserMedia({ video: true }).then(s => webcam.srcObject = s);
 
-        function updateFilter(type, btn) {
-            currentFilter = type;
-            video.className = 'f-' + type;
-            crown.style.display = (type === 'hearts') ? 'block' : 'none';
+        function applyMode(mode, btn) {
+            activeMode = mode;
+            webcam.className = 'preview-' + mode;
+            crown.style.display = (mode === 'hearts') ? 'block' : 'none';
             document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
         }
 
-        async function takeFourShots() {
-            photos = [];
-            document.getElementById('main-action').disabled = true;
+        async function captureSession() {
+            sessionShots = [];
+            document.getElementById('go-btn').disabled = true;
 
             for (let i = 0; i < 4; i++) {
-                await runTimer(3);
-                const data = captureToData();
-                photos.push(data);
-                document.getElementById('p' + i).src = data;
-                await new Promise(r => setTimeout(r, 800));
+                await runCountdown(3);
+                triggerFlash();
+                const frameData = saveCurrentFrame();
+                sessionShots.push(frameData);
+                document.getElementById('prev' + i).src = frameData;
+                await new Promise(r => setTimeout(r, 1000));
             }
 
-            renderFinalStrip();
-            document.getElementById('main-action').disabled = false;
+            assembleFinalStrip();
+            document.getElementById('go-btn').disabled = false;
         }
 
-        function runTimer(sec) {
+        function runCountdown(sec) {
             return new Promise(res => {
-                const countEl = document.getElementById('countdown');
-                countEl.style.display = 'block';
+                const el = document.getElementById('timer-text');
+                el.style.display = 'block';
                 let time = sec;
-                countEl.innerText = time;
-                const timer = setInterval(() => {
+                el.innerText = time;
+                const clock = setInterval(() => {
                     time--;
-                    if (time <= 0) { clearInterval(timer); countEl.style.display = 'none'; res(); }
-                    else { countEl.innerText = time; }
+                    if (time <= 0) { clearInterval(clock); el.style.display = 'none'; res(); }
+                    else { el.innerText = time; }
                 }, 1000);
             });
         }
 
-        function captureToData() {
+        function triggerFlash() {
+            flash.style.opacity = '1';
+            setTimeout(() => { flash.style.opacity = '0'; }, 100);
+        }
+
+        function saveCurrentFrame() {
             const temp = document.createElement('canvas');
             temp.width = 600; temp.height = 450;
             const tCtx = temp.getContext('2d');
 
-            // 1. Fill background (important for 0.5 look)
+            // 1. Black base
             tCtx.fillStyle = "black";
             tCtx.fillRect(0, 0, 600, 450);
 
-            // 2. Mirror and draw
             tCtx.save();
             tCtx.translate(600, 0); tCtx.scale(-1, 1);
 
-            if(currentFilter === 'bw') tCtx.filter = 'grayscale(100%) contrast(120%)';
-            if(currentFilter === 'sepia') tCtx.filter = 'sepia(100%) contrast(110%)';
+            // 2. APPLY FILTERS TO PIXELS
+            if(activeMode === 'bw') tCtx.filter = 'grayscale(100%) contrast(120%)';
+            if(activeMode === 'sepia') tCtx.filter = 'sepia(100%) contrast(110%)';
             
-            // 0.5 Wide Logic: Draw video smaller so you see more "room"
-            if(currentFilter === 'fisheye') {
-                tCtx.drawImage(video, 75, 56, 450, 337); 
+            // 0.5 Wide Logic
+            if(activeMode === 'wide') {
+                tCtx.drawImage(webcam, 100, 75, 400, 300); 
             } else {
-                tCtx.drawImage(video, 0, 0, 600, 450);
+                tCtx.drawImage(webcam, 0, 0, 600, 450);
             }
             tCtx.restore();
 
-            // MacBook Hearts Logic: Draw crown on top center
-            if(currentFilter === 'hearts') {
-                const heartIcon = new Image();
-                heartIcon.src = 'https://cdn-icons-png.flaticon.com/512/833/833472.png';
-                // Drawing three hearts in an arch at the top
-                tCtx.drawImage(heartIcon, 220, 20, 50, 50);
-                tCtx.drawImage(heartIcon, 275, 5, 50, 50);
-                tCtx.drawImage(heartIcon, 330, 20, 50, 50);
+            // MacBook Hearts Crown
+            if(activeMode === 'hearts') {
+                tCtx.font = "50px Arial";
+                tCtx.textAlign = "center";
+                tCtx.fillText("❤️", 230, 60);
+                tCtx.fillText("❤️", 300, 45);
+                tCtx.fillText("❤️", 370, 60);
             }
 
             return temp.toDataURL('image/png');
@@ -163,26 +175,26 @@
 
         
 
-        function renderFinalStrip() {
-            ctx.fillStyle = "#111111";
-            ctx.fillRect(0, 0, 600, 1800);
+        function assembleFinalStrip() {
+            hCtx.fillStyle = "#111111";
+            hCtx.fillRect(0, 0, 600, 1800);
 
-            let loaded = 0;
-            photos.forEach((src, i) => {
+            let finished = 0;
+            sessionShots.forEach((src, i) => {
                 const img = new Image();
                 img.src = src;
                 img.onload = () => {
-                    ctx.drawImage(img, 40, 150 + (i * 395), 520, 370);
-                    loaded++;
-                    if (loaded === 4) {
-                        ctx.fillStyle = "white";
-                        ctx.font = "italic 28px 'Courier New'";
-                        ctx.textAlign = "center";
-                        ctx.fillText("C and N photobooth", 300, 1750);
+                    hCtx.drawImage(img, 40, 150 + (i * 395), 520, 370);
+                    finished++;
+                    if (finished === 4) {
+                        hCtx.fillStyle = "white";
+                        hCtx.font = "italic 28px 'Courier New'";
+                        hCtx.textAlign = "center";
+                        hCtx.fillText("C and N photobooth", 300, 1750);
                         
                         const link = document.createElement('a');
-                        link.href = canvas.toDataURL('image/png');
-                        link.download = `CN_Booth.png`;
+                        link.href = hCanvas.toDataURL('image/png');
+                        link.download = `CN_Strip_${Date.now()}.png`;
                         link.click();
                     }
                 };
