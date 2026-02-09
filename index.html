@@ -3,211 +3,133 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>C & N Vintage Booth</title>
+    <title>C & N Photobooth</title>
     <style>
-        :root { --cream: #f4ecd8; --sepia: #704214; }
         body { 
             background: #d7ccc8; font-family: 'Courier New', Courier, monospace; 
             display: flex; flex-direction: column; align-items: center; padding: 20px;
-            color: var(--sepia);
         }
-        
-        .controls { margin-bottom: 15px; display: flex; gap: 8px; }
-        .filter-btn { 
-            padding: 8px 12px; border: 1px solid var(--sepia); 
-            background: var(--cream); cursor: pointer; font-family: inherit;
-        }
-        .filter-btn.active { background: var(--sepia); color: white; }
+        /* Filter Styles for the Video Preview */
+        .none { filter: none; }
+        .bw { filter: grayscale(1) contrast(1.2) brightness(1.1); }
+        .sepia { filter: sepia(1) contrast(1.1) brightness(0.9); }
 
-        #camera-container {
-            position: relative; width: 320px; height: 320px;
-            border: 10px solid white; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            background: #000; overflow: hidden;
+        #camera-wrapper {
+            position: relative; width: 300px; height: 300px;
+            border: 10px solid white; box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+            background: #000; overflow: hidden; margin-bottom: 20px;
         }
         video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-        
-        /* Filter Classes */
-        .bw-filter { filter: grayscale(1) contrast(1.2); }
-        .sepia-filter { filter: sepia(1) contrast(1.1); }
 
+        .controls { margin-bottom: 15px; display: flex; gap: 10px; }
+        .filter-btn { 
+            padding: 8px 15px; border: 1px solid #704214; 
+            background: #f4ecd8; cursor: pointer; font-family: inherit;
+        }
+        .filter-btn.active { background: #704214; color: white; }
+
+        .main-btn {
+            padding: 15px 40px; background: #a64452; color: white; 
+            border: none; cursor: pointer; font-size: 1.1rem; font-family: inherit;
+        }
         #countdown {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             font-size: 5rem; color: white; font-weight: bold; z-index: 10; display: none;
         }
-
-        .main-btn {
-            margin-top: 20px; padding: 15px 40px; background: #a64452;
-            color: white; border: none; cursor: pointer; font-size: 1.1rem;
-            font-family: inherit; letter-spacing: 1px;
-        }
-
-        #status { margin-top: 15px; font-size: 0.9rem; letter-spacing: 1px; }
-
-        #gallery { margin-top: 30px; display: flex; flex-direction: column; gap: 20px; }
-        .strip-output { 
-            background: white; padding: 15px 15px 40px 15px; 
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 200px;
-        }
-        .strip-output img { width: 100%; }
+        #gallery { margin-top: 30px; }
+        .final-strip { background: white; padding: 10px; box-shadow: 0 10px 20px rgba(0,0,0,0.2); width: 160px; }
     </style>
 </head>
 <body>
 
-    <h2 style="letter-spacing: 4px;">PHOTO AUTOMAT</h2>
-    
+    <h2 style="letter-spacing: 2px;">C & N PHOTOBOOTH</h2>
+
     <div class="controls">
-        <button class="filter-btn active" onclick="setFilter('none', this)">ORIGINAL</button>
-        <button class="filter-btn" onclick="setFilter('bw', this)">B&W</button>
-        <button class="filter-btn" onclick="setFilter('sepia', this)">SEPIA</button>
+        <button class="filter-btn active" onclick="updateFilter('none', this)">ORIGINAL</button>
+        <button class="filter-btn" onclick="updateFilter('bw', this)">B&W</button>
+        <button class="filter-btn" onclick="updateFilter('sepia', this)">SEPIA</button>
     </div>
 
-    <div id="camera-container">
-        <video id="video" autoplay playsinline></video>
+    <div id="camera-wrapper">
+        <video id="video" autoplay playsinline class="none"></video>
         <div id="countdown">3</div>
     </div>
 
-    <div id="status">CHOOSE A FILTER & PRESS START</div>
-    <button id="start-btn" class="main-btn" onclick="startSequence()">START 4-SHOTS</button>
+    <button id="snap-btn" class="main-btn" onclick="startBooth()">START SESSION</button>
+    <p id="status">4 shots will be taken automatically</p>
 
     <div id="gallery"></div>
 
-    <canvas id="stripCanvas" style="display:none;" width="600" height="2200"></canvas>
+    <canvas id="stripCanvas" width="500" height="1800" style="display:none;"></canvas>
 
     <script>
         const video = document.getElementById('video');
         const countdownEl = document.getElementById('countdown');
-        const statusEl = document.getElementById('status');
-        let currentFilter = 'none';
+        const canvas = document.getElementById('stripCanvas');
+        const ctx = canvas.getContext('2d');
+        let selectedFilter = 'none';
         let shots = [];
-        let isCapturing = false;
 
-        // Load Stickers
-        const stickers = [new Image(), new Image(), new Image(), new Image()];
-        stickers[0].src = 'fav1.png'; stickers[1].src = 'fav2.png';
-        stickers[2].src = 'fav3.png'; stickers[3].src = 'fav4.png';
+        // Preload Stickers
+        const stickers = ["fav1.png", "fav2.png", "fav3.png", "fav4.png"].map(src => {
+            const img = new Image();
+            img.src = src;
+            return img;
+        });
 
         navigator.mediaDevices.getUserMedia({ video: { aspectRatio: 1 } }).then(s => video.srcObject = s);
 
-        function setFilter(type, btn) {
-            if(isCapturing) return;
-            currentFilter = type;
-            video.className = '';
+        function updateFilter(type, btn) {
+            selectedFilter = type;
+            video.className = type;
             document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            if(type === 'bw') video.classList.add('bw-filter');
-            if(type === 'sepia') video.classList.add('sepia-filter');
         }
 
-        async function startSequence() {
-            if(isCapturing) return;
-            isCapturing = true;
+        async function startBooth() {
             shots = [];
-            document.getElementById('start-btn').style.opacity = '0.5';
+            document.getElementById('snap-btn').disabled = true;
             
-            for(let i=0; i<4; i++) {
-                statusEl.innerText = `GET READY FOR POSE ${i+1}...`;
+            for (let i = 0; i < 4; i++) {
                 await runCountdown();
-                captureShot();
-                await new Promise(res => setTimeout(res, 1200)); 
+                captureSingleShot();
+                await new Promise(r => setTimeout(r, 1000));
             }
             
-            statusEl.innerText = "DEVELOPING STRIP...";
-            generateStrip();
-            isCapturing = false;
-            document.getElementById('start-btn').style.opacity = '1';
+            assembleStrip();
+            document.getElementById('snap-btn').disabled = false;
         }
 
         function runCountdown() {
-            return new Promise(resolve => {
+            return new Promise(res => {
                 let count = 3;
                 countdownEl.style.display = 'block';
                 countdownEl.innerText = count;
                 let timer = setInterval(() => {
                     count--;
                     if(count > 0) countdownEl.innerText = count;
-                    else {
-                        clearInterval(timer);
-                        countdownEl.style.display = 'none';
-                        resolve();
-                    }
+                    else { clearInterval(timer); countdownEl.style.display = 'none'; res(); }
                 }, 1000);
             });
         }
 
-        function captureShot() {
+        function captureSingleShot() {
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = 600; tempCanvas.height = 450;
-            const ctx = tempCanvas.getContext('2d');
+            tempCanvas.width = 440; tempCanvas.height = 380;
+            const tCtx = tempCanvas.getContext('2d');
             
-            // Mirror & Filter logic for the shot
-            ctx.translate(600, 0); ctx.scale(-1, 1);
-            if(currentFilter === 'bw') ctx.filter = 'grayscale(1) contrast(1.2)';
-            if(currentFilter === 'sepia') ctx.filter = 'sepia(1) contrast(1.1)';
+            // Mirror
+            tCtx.translate(440, 0); tCtx.scale(-1, 1);
             
-            ctx.drawImage(video, 0, 0, 600, 450);
+            // APPLY FILTER TO CANVAS
+            if(selectedFilter === 'bw') tCtx.filter = 'grayscale(1) contrast(1.2)';
+            if(selectedFilter === 'sepia') tCtx.filter = 'sepia(1) contrast(1.1)';
+            
+            tCtx.drawImage(video, 0, 0, 440, 380);
             shots.push(tempCanvas.toDataURL('image/png'));
         }
 
-        function generateStrip() {
-            const canvas = document.getElementById('stripCanvas');
-            const ctx = canvas.getContext('2d');
-            
-            // 1. Vintage White/Cream Background
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(0, 0, 600, 2200);
-
-            // 2. Draw 4 shots vertically
-            let loaded = 0;
-            shots.forEach((shotData, i) => {
-                const img = new Image();
-                img.src = shotData;
-                img.onload = () => {
-                    const yPos = 40 + (i * 480);
-                    ctx.drawImage(img, 40, yPos, 520, 440);
-                    
-                    // 3. Place Stickers at corners
-                    const sticker = stickers[i];
-                    ctx.save();
-                    // Positioning: Sticker on the bottom right of each frame
-                    const sx = 400; const sy = yPos + 300;
-                    // White outline effect for sticker
-                    ctx.shadowColor = "white"; ctx.shadowBlur = 8;
-                    ctx.drawImage(sticker, sx, sy, 140, 140);
-                    ctx.restore();
-
-                    loaded++;
-                    if(loaded === 4) finishStrip(canvas);
-                };
-            });
-        }
-
-        function finishStrip(canvas) {
-            const ctx = canvas.getContext('2d');
-            // 4. Minimal Typewriter Footer
-            ctx.fillStyle = "#3e2723";
-            ctx.font = "32px 'Courier New'";
-            ctx.textAlign = "center";
-            ctx.fillText("C and N photobooth", 300, 2050);
-            ctx.font = "20px 'Courier New'";
-            ctx.fillText(new Date().toLocaleDateString(), 300, 2100);
-
-            const finalUrl = canvas.toDataURL('image/png');
-            
-            // Show in Gallery
-            const gallery = document.getElementById('gallery');
-            const div = document.createElement('div');
-            div.className = 'strip-output';
-            div.innerHTML = `<img src="${finalUrl}"><p style="font-size:10px;margin-top:10px;">SAVED TO GALLERY</p>`;
-            gallery.prepend(div);
-
-            // Auto Download
-            const link = document.createElement('a');
-            link.download = `CN-Booth-${Date.now()}.png`;
-            link.href = finalUrl;
-            link.click();
-            
-            statusEl.innerText = "STRIP SAVED!";
-        }
-    </script>
-</body>
-</html>
+        function assembleStrip() {
+            // 1. Background
+            ctx.fillStyle = "white";
+            ctx.
